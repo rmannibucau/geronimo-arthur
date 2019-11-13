@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Licensed to the Apache Software Foundation (ASF) under one or more
+    contributor license agreements.  See the NOTICE file distributed with
+    this work for additional information regarding copyright ownership.
+    The ASF licenses this file to You under the Apache License, Version 2.0
+    (the "License"); you may not use this file except in compliance with
+    the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="
+            http://maven.apache.org/POM/4.0.0
+            http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <parent>
+    <groupId>org.apache</groupId>
+    <artifactId>apache</artifactId>
+    <version>21</version>
+  </parent>
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>org.apache.geronimo.arthur.integrationtests</groupId>
+  <artifactId>owb</artifactId>
+  <version>1.0.0-SNAPSHOT</version>
+  <name>Arthur :: Integration Tests :: OWB</name>
+
+  <properties>
+    <!-- main deps -->
+    <xbean.version>4.15</xbean.version>
+    <slf4j.version>1.7.28</slf4j.version>
+    <ziplock.version>8.0.0</ziplock.version>
+    <johnzon.version>1.2.1</johnzon.version>
+    <geronimo-json.version>1.2</geronimo-json.version>
+    <geronimo-jsonb.version>1.2</geronimo-jsonb.version>
+    <commons-compress.version>1.19</commons-compress.version>
+
+    <!-- knights -->
+    <jsch.version>0.1.55</jsch.version>
+    <graalvm.version>19.2.1</graalvm.version>
+    <geronimo-jcdi.version>1.1</geronimo-jcdi.version>
+    <openwebbeans.version>2.0.12</openwebbeans.version>
+    <geronimo-atinject.version>1.1</geronimo-atinject.version>
+    <geronimo-annotation.version>1.2</geronimo-annotation.version>
+    <geronimo-interceptor.version>1.1</geronimo-interceptor.version>
+    <winegrower.version>1.0-SNAPSHOT</winegrower.version> <!-- search for NEEDS_WINEGROWER_RELEASE once released -->
+
+    <!-- plugin versions/confs -->
+    <maven-compiler-plugin.version>3.8.1</maven-compiler-plugin.version>
+    <maven.compiler.source>8</maven.compiler.source>
+    <maven.compiler.target>8</maven.compiler.target>
+
+    <!-- jar vars -->
+    <geronimo-arthur.shortname>${project.artifactId}</geronimo-arthur.shortname>
+    <geronimo-arthur.Automatic-Module-Name>${project.groupId}.${geronimo-arthur.shortname}</geronimo-arthur.Automatic-Module-Name>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.geronimo.specs</groupId>
+      <artifactId>geronimo-annotation_1.3_spec</artifactId>
+      <version>${geronimo-annotation.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.geronimo.specs</groupId>
+      <artifactId>geronimo-jcdi_2.0_spec</artifactId>
+      <version>${geronimo-jcdi.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.geronimo.specs</groupId>
+      <artifactId>geronimo-atinject_1.0_spec</artifactId>
+      <version>${geronimo-atinject.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.geronimo.specs</groupId>
+      <artifactId>geronimo-interceptor_1.2_spec</artifactId>
+      <version>${geronimo-interceptor.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.openwebbeans</groupId>
+      <artifactId>openwebbeans-se</artifactId>
+      <version>${openwebbeans.version}</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>${maven-compiler-plugin.version}</version>
+        <configuration>
+          <source>${maven.compiler.source}</source>
+          <target>${maven.compiler.target}</target>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.geronimo.arthur</groupId>
+        <artifactId>arthur-maven-plugin</artifactId>
+        <version>${project.version}</version>
+        <configuration>
+          <main>org.apache.geronimo.arthur.integrationtests.CdiMain</main>
+          <includeResourceBundles>
+            <includeResourceBundle>openwebbeans/Messages</includeResourceBundle>
+          </includeResourceBundles>
+          <resources>
+            <resource>
+              <pattern>META\-INF/openwebbeans/openwebbeans\.properties</pattern>
+            </resource>
+          </resources>
+          <reflections>
+            <!-- all OWB SPI -->
+            <reflection>
+              <name>org.apache.webbeans.spi.ScannerService</name>
+              <allPublicConstructors>true</allPublicConstructors>
+            </reflection>
+            <reflection>
+              <name>org.apache.webbeans.spi.LoaderService</name>
+              <allPublicConstructors>true</allPublicConstructors>
+            </reflection>
+            <reflection>
+              <name>org.apache.webbeans.spi.BeanArchiveService</name>
+              <allPublicConstructors>true</allPublicConstructors>
+            </reflection>
+            <reflection>
+              <name>org.apache.webbeans.spi.SecurityService</name>
+              <allPublicConstructors>true</allPublicConstructors>
+            </reflection>
+            <reflection>
+              <name>org.apache.webbeans.spi.ContainerLifecycle</name>
+              <allPublicConstructors>true</allPublicConstructors>
+            </reflection>
+            <reflection>
+              <name>org.apache.webbeans.spi.JNDIService</name>
+              <allPublicConstructors>true</allPublicConstructors>
+            </reflection>
+            <reflection>
+              <name>org.apache.webbeans.spi.ApplicationBoundaryService</name>
+              <allPublicConstructors>true</allPublicConstructors>
+            </reflection>
+            <reflection>
+              <name>org.apache.webbeans.spi.ContextsService</name>
+              <allPublicConstructors>true</allPublicConstructors>
+            </reflection>
+            <reflection>
+              <name>org.apache.webbeans.spi.InjectionPointService</name>
+              <allPublicConstructors>true</allPublicConstructors>
+            </reflection>
+            <reflection>
+              <name>org.apache.webbeans.spi.ResourceInjectionService</name>
+              <allPublicConstructors>true</allPublicConstructors>
+            </reflection>
+            <reflection>
+              <name>org.apache.webbeans.spi.DefiningClassService</name>
+              <allPublicConstructors>true</allPublicConstructors>
+            </reflection>
+            <reflection>
+              <name>org.apache.xbean.finder.filter.Filter</name>
+              <allPublicConstructors>true</allPublicConstructors>
+            </reflection>
+            <!-- SPI impls -->
+            <reflection>
+              <name>org.apache.webbeans.lifecycle.StandaloneLifeCycle</name>
+              <allPublicConstructors>true</allPublicConstructors>
+            </reflection>
+            <reflection>
+              <name>org.apache.webbeans.corespi.se.StandaloneContextsService</name>
+              <allPublicConstructors>true</allPublicConstructors>
+            </reflection>
+            <reflection>
+              <name>org.apache.webbeans.service.DefaultLoaderService</name>
+              <allPublicConstructors>true</allPublicConstructors>
+            </reflection>
+            <!-- Other reflection usages (main beans) -->
+            <reflection>
+              <name>org.apache.webbeans.inject.impl.InjectionPointImpl</name>
+            </reflection>
+            <reflection>
+              <name>org.apache.webbeans.conversation.ConversationImpl</name>
+              <allPublicConstructors>true</allPublicConstructors>
+            </reflection>
+            <!-- Annotations methods -->
+            <reflection>
+              <name>javax.enterprise.context.Initialized</name>
+              <allDeclaredMethods>true</allDeclaredMethods>
+            </reflection>
+            <reflection>
+              <name>javax.enterprise.context.NormalScope</name>
+              <allDeclaredMethods>true</allDeclaredMethods>
+            </reflection>
+            <reflection>
+              <name>javax.enterprise.context.ApplicationScoped</name>
+              <allDeclaredMethods>true</allDeclaredMethods>
+            </reflection>
+            <reflection>
+              <name>javax.interceptor.InterceptorBinding</name>
+              <allDeclaredMethods>true</allDeclaredMethods>
+            </reflection>
+            <!-- application itself -->
+            <reflection>
+              <name>org.integrationtests.apache.geronimo.arthur.cdi.Application</name>
+              <allDeclaredConstructors>true</allDeclaredConstructors>
+              <allDeclaredMethods>true</allDeclaredMethods>
+              <allDeclaredFields>true</allDeclaredFields>
+            </reflection>
+            <reflection>
+              <name>org.integrationtests.apache.geronimo.arthur.cdi.StartInterceptor</name>
+              <allDeclaredConstructors>true</allDeclaredConstructors>
+              <allDeclaredMethods>true</allDeclaredMethods>
+              <allDeclaredFields>true</allDeclaredFields>
+            </reflection>
+          </reflections>
+          <initializeAtBuildTime>
+            <!-- enum in an annotation so must be init at build time -->
+            <initializeAtBuildTime>javax.enterprise.event.Reception</initializeAtBuildTime>
+            <initializeAtBuildTime>javax.enterprise.event.TransactionPhase</initializeAtBuildTime>
+          </initializeAtBuildTime>
+          <graalExtensions>
+            <graalExtension>openwebbeans</graalExtension>
+          </graalExtensions>
+          <!-- avoid to conflict with host cache since we mount the local m2 to speed up the execution -->
+          <graalCacheGav>org.apache.geronimo.arthur.cache:graal-integrationtests</graalCacheGav>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

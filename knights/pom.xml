@@ -34,6 +34,7 @@
 
   <modules>
     <module>jsch-knight</module>
+    <module>openwebbeans-knight</module>
     <!-- NEEDS_WINEGROWER_RELEASE deactivated until the release
     <module>winegrower-knight</module>
     -->

@@ -39,12 +39,22 @@
 
   <properties>
     <!-- main deps -->
+    <xbean.version>4.15</xbean.version>
     <slf4j.version>1.7.28</slf4j.version>
     <ziplock.version>8.0.0</ziplock.version>
+    <johnzon.version>1.2.1</johnzon.version>
+    <geronimo-json.version>1.2</geronimo-json.version>
+    <geronimo-jsonb.version>1.2</geronimo-jsonb.version>
+    <commons-compress.version>1.19</commons-compress.version>
 
     <!-- knights -->
     <jsch.version>0.1.55</jsch.version>
     <graalvm.version>19.2.1</graalvm.version>
+    <geronimo-jcdi.version>1.1</geronimo-jcdi.version>
+    <openwebbeans.version>2.0.12</openwebbeans.version>
+    <geronimo-atinject.version>1.1</geronimo-atinject.version>
+    <geronimo-annotation.version>1.2</geronimo-annotation.version>
+    <geronimo-interceptor.version>1.1</geronimo-interceptor.version>
     <winegrower.version>1.0-SNAPSHOT</winegrower.version> <!-- search for NEEDS_WINEGROWER_RELEASE once released -->
 
     <!-- plugin versions/confs -->
@@ -54,8 +64,7 @@
 
     <!-- jar vars -->
     <geronimo-arthur.shortname>${project.artifactId}</geronimo-arthur.shortname>
-    <geronimo-arthur.Automatic-Module-Name>${project.groupId}.${geronimo-arthur.shortname}
-    </geronimo-arthur.Automatic-Module-Name>
+    <geronimo-arthur.Automatic-Module-Name>${project.groupId}.${geronimo-arthur.shortname}</geronimo-arthur.Automatic-Module-Name>
   </properties>
 
   <modules>
@@ -108,12 +117,12 @@
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-compress</artifactId>
-        <version>1.19</version>
+        <version>${commons-compress.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-finder-shaded</artifactId>
-        <version>4.15</version>
+        <version>${xbean.version}</version>
         <exclusions>
           <exclusion>
             <groupId>org.apache.xbean</groupId>
@@ -124,17 +133,17 @@
       <dependency>
         <groupId>org.apache.geronimo.specs</groupId>
         <artifactId>geronimo-json_1.1_spec</artifactId>
-        <version>1.2</version>
+        <version>${geronimo-json.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.geronimo.specs</groupId>
         <artifactId>geronimo-jsonb_1.0_spec</artifactId>
-        <version>1.2</version>
+        <version>${geronimo-jsonb.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.johnzon</groupId>
         <artifactId>johnzon-jsonb</artifactId>
-        <version>1.2.1</version>
+        <version>${johnzon.version}</version>
       </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>

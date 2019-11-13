@@ -56,6 +56,17 @@
         </exclusion>
       </exclusions>
     </dependency>
+    <dependency>
+      <groupId>${project.groupId}.knights</groupId>
+      <artifactId>openwebbeans-knight</artifactId>
+      <version>${project.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>*</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
     <!-- NEEDS_WINEGROWER_RELEASE deactivated until the release
     <dependency>
       <groupId>${project.groupId}.knights</groupId>

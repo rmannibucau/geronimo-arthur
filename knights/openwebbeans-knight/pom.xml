@@ -27,11 +27,11 @@
   </parent>
   <modelVersion>4.0.0</modelVersion>
 
-  <artifactId>winegrower-knight</artifactId>
-  <name>Arthur :: Knights :: Winegrower</name>
+  <artifactId>openwebbeans-knight</artifactId>
+  <name>Arthur :: Knights :: OpenWebBeans</name>
 
   <properties>
-    <geronimo-arthur.shortname>knight.winegrower</geronimo-arthur.shortname>
+    <geronimo-arthur.shortname>knight.openwebbeans</geronimo-arthur.shortname>
   </properties>
 
   <dependencies>
@@ -45,13 +45,34 @@
     </dependency>
 
     <dependency>
-      <groupId>org.apache.xbean</groupId>
-      <artifactId>xbean-finder-shaded</artifactId>
+      <groupId>org.apache.geronimo.specs</groupId>
+      <artifactId>geronimo-annotation_1.3_spec</artifactId>
+      <version>${geronimo-annotation.version}</version>
+      <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.winegrower</groupId>
-      <artifactId>winegrower-build-common</artifactId>
-      <version>${winegrower.version}</version>
+      <groupId>org.apache.geronimo.specs</groupId>
+      <artifactId>geronimo-jcdi_2.0_spec</artifactId>
+      <version>${geronimo-jcdi.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.geronimo.specs</groupId>
+      <artifactId>geronimo-atinject_1.0_spec</artifactId>
+      <version>${geronimo-atinject.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.geronimo.specs</groupId>
+      <artifactId>geronimo-interceptor_1.2_spec</artifactId>
+      <version>${geronimo-interceptor.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.openwebbeans</groupId>
+      <artifactId>openwebbeans-se</artifactId>
+      <version>${openwebbeans.version}</version>
+      <scope>provided</scope>
     </dependency>
 
     <dependency>
@@ -59,11 +80,6 @@
       <artifactId>svm</artifactId>
       <version>${graalvm.version}</version>
       <scope>provided</scope>
-    </dependency>
-
-    <dependency>
-      <groupId>org.apache.geronimo.arthur</groupId>
-      <artifactId>arthur-impl</artifactId>
     </dependency>
   </dependencies>
 </project>
