@@ -17,13 +17,37 @@
 package org.apache.geronimo.arthur.knight.meecrowave;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.cxf.bus.extension.Extension;
+import org.apache.cxf.bus.extension.TextExtensionFragmentParser;
+import org.apache.cxf.jaxrs.utils.InjectionUtils;
+import org.apache.geronimo.arthur.knight.openwebbeans.OpenWebBeansExtension;
 import org.apache.geronimo.arthur.spi.ArthurExtension;
 import org.apache.geronimo.arthur.spi.model.ClassReflectionModel;
 import org.apache.geronimo.arthur.spi.model.ResourceBundleModel;
 import org.apache.geronimo.arthur.spi.model.ResourceModel;
+import org.apache.meecrowave.runner.cli.CliOption;
+import org.apache.xbean.finder.UrlSet;
+import org.apache.xbean.finder.filter.Filter;
+import org.apache.xbean.finder.filter.Filters;
+import org.apache.xbean.finder.util.Files;
 
-import java.util.Collections;
+import javax.json.bind.annotation.JsonbProperty;
+import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.net.URL;
+import java.util.Enumeration;
+import java.util.Objects;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import java.util.stream.Stream;
+
+import static java.util.Collections.list;
+import static java.util.Collections.singletonList;
+import static java.util.Optional.ofNullable;
+import static java.util.stream.Collectors.joining;
 
 @Slf4j
 public class MeecrowaveExtension implements ArthurExtension {
@@ -32,96 +56,80 @@ public class MeecrowaveExtension implements ArthurExtension {
         registerReflections(context);
         registerResources(context);
         registerIncludeResourceBundles(context);
+        registerPerAnnotations(context);
 
-        context.setProperty("annotation.custom.annotations.properties",
-                "javax.json.bind.annotation.JsonbProperty:allDeclaredConstructors=true|allDeclaredMethods=true|allDeclaredFields=true," +
-                "org.apache.meecrowave.runner.cli.CliOption:allDeclaredFields=true");
+        // run owb extension to ensure we get the beans and proxy registration
+        final boolean skipDefaultExcludes = ofNullable(context.getProperty("meecrowave.extension.openwebbeans.skipDefaultExcludes"))
+                .map(Boolean::parseBoolean)
+                .orElse(false);
+        new OpenWebBeansExtension().execute(skipDefaultExcludes ? context : context.wrap(context, (proxy, method, args) -> {
+            if ("getProperty".equals(method.getName()) && "openwebbeans.extension.excludes".equals(args[0])) {
+                final String existing = context.getProperty("openwebbeans.extension.excludes");
+                return Stream.of(
+                        existing,
+                        "org.apache.cxf.Bus",
+                        "org.apache.cxf.common.util.ClassUnwrapper",
+                        "org.apache.cxf.interceptor.InterceptorProvider",
+                        "org.apache.openwebbeans.se")
+                        .filter(Objects::nonNull)
+                        .collect(joining(","));
+            }
+            // else purely delegate to the actual context
+            try {
+                return method.invoke(context, args);
+            } catch (final InvocationTargetException ite) {
+                throw ite.getTargetException();
+            }
+        }));
+    }
 
-        context.setProperty("openwebbeans.extension.excludes",
-                "org.apache.cxf.Bus,org.apache.cxf.common.util.ClassUnwrapper," +
-                "org.apache.cxf.interceptor.InterceptorProvider," +
-                "io.yupiik.logging.jul," +
-                "org.apache.openwebbeans.se");
+    private void registerPerAnnotations(final Context context) {
+        // JSON-B models - we assume there is at least one prop with @JsonbProperty
+        Stream.concat(
+                context.findAnnotatedFields(JsonbProperty.class).stream()
+                        .map(Field::getDeclaringClass),
+                context.findAnnotatedMethods(JsonbProperty.class).stream()
+                        .map(Method::getDeclaringClass))
+                .distinct()
+                .flatMap(it -> Stream.concat(Stream.of(it), context.findHierarchy(it)))
+                .distinct()
+                .map(c -> new ClassReflectionModel(c.getName(), true, null, true, true, null, null, true, true, null, null))
+                .forEach(context::register);
 
-        context.addNativeImageOption("-Dopenwebbeans.logging.factory=org.apache.webbeans.logger.JULLoggerFactory");
-        context.addNativeImageOption("-Djava.util.logging.manager=io.yupiik.logging.jul.YupiikLogManager");
+        try { // meecrowave CLI if present
+            context.loadClass("org.apache.commons.cli.CommandLineParser");
+            context.findAnnotatedFields(CliOption.class).stream()
+                    .map(Field::getDeclaringClass)
+                    .map(c -> new ClassReflectionModel(c.getName(), null, null, null, null, null, null, true, null, null, null))
+                    .forEach(context::register);
+        } catch (final IllegalStateException ise) {
+            // no-op, skip
+        }
     }
 
     private void registerReflections(final Context context) {
-        Stream.of("org.apache.cxf.BusFactory").map(it -> {
-            ClassReflectionModel crm = new ClassReflectionModel();
-            crm.setName(it);
-            return crm;
-        }).forEach(context::register);
+        Stream.of("org.apache.cxf.BusFactory")
+                .map(it -> new ClassReflectionModel(it, null, null, null, null, null, null, null, null, null, null))
+                .forEach(context::register);
 
-        Stream.of(
-                "javax.ws.rs.core.UriInfo",
-                "javax.ws.rs.core.HttpHeaders",
-                "javax.ws.rs.core.Request",
-                "javax.ws.rs.core.SecurityContext",
-                "javax.ws.rs.ext.Providers",
-                "javax.ws.rs.ext.ContextResolver",
-                "javax.servlet.http.HttpServletRequest",
-                "javax.servlet.http.HttpServletResponse",
-                "javax.ws.rs.core.Application")
-                .map(it -> {
-                    ClassReflectionModel crm = new ClassReflectionModel();
-                    crm.setName(it);
-                    crm.setAllPublicMethods(true);
-                    return crm;
-                })
+        findContextTypes(context)
+                .map(it -> new ClassReflectionModel(it, null, null, null, true, null, null, null, null, null, null))
                 .forEach(context::register);
 
         Stream.of(
                 "org.apache.meecrowave.cxf.JAXRSFieldInjectionInterceptor",
                 "org.apache.cxf.cdi.DefaultApplication")
-                .map(it -> {
-                    ClassReflectionModel crm = new ClassReflectionModel();
-                    crm.setName(it);
-                    crm.setAllPublicMethods(true);
-                    crm.setAllPublicConstructors(true);
-                    return crm;
-                })
+                .map(it -> new ClassReflectionModel(it, null, true, null, true, null, null, null, null, null, null))
                 .forEach(context::register);
 
-        Stream.of(
-                "org.apache.cxf.bus.managers.CXFBusLifeCycleManager",
-                "org.apache.cxf.bus.managers.ClientLifeCycleManagerImpl",
-                "org.apache.cxf.bus.managers.EndpointResolverRegistryImpl",
-                "org.apache.cxf.bus.managers.HeaderManagerImpl",
-                "org.apache.cxf.bus.managers.PhaseManagerImpl",
-                "org.apache.cxf.bus.managers.ServerLifeCycleManagerImpl",
-                "org.apache.cxf.bus.managers.ServerRegistryImpl",
-                "org.apache.cxf.bus.managers.WorkQueueManagerImpl",
-                "org.apache.cxf.bus.resource.ResourceManagerImpl",
-                "org.apache.cxf.catalog.OASISCatalogManager",
-                "org.apache.cxf.common.spi.ClassLoaderProxyService",
-                "org.apache.cxf.common.util.ASMHelperImpl",
-                "org.apache.cxf.service.factory.FactoryBeanListenerManager",
-                "org.apache.cxf.transport.http.HTTPTransportFactory",
-                "org.apache.cxf.catalog.OASISCatalogManager",
-                "org.apache.cxf.endpoint.ClientLifeCycleManager",
-                "org.apache.cxf.buslifecycle.BusLifeCycleManager",
-                "org.apache.cxf.phase.PhaseManager",
-                "org.apache.cxf.resource.ResourceManager",
-                "org.apache.cxf.headers.HeaderManager",
-                "org.apache.cxf.common.util.ASMHelper",
-                "org.apache.cxf.common.spi.ClassLoaderService",
-                "org.apache.cxf.endpoint.EndpointResolverRegistry",
-                "org.apache.cxf.endpoint.ServerLifeCycleManager",
-                "org.apache.cxf.workqueue.WorkQueueManager",
-                "org.apache.cxf.endpoint.ServerRegistry",
-                "org.apache.cxf.jaxrs.JAXRSBindingFactory",
-                "org.apache.webbeans.web.lifecycle.WebContainerLifecycle",
-                "org.apache.meecrowave.logging.tomcat.LogFacade",
-                "org.apache.catalina.servlets.DefaultServlet",
-                "org.apache.catalina.authenticator.NonLoginAuthenticator")
-                .map(it -> {
-                    ClassReflectionModel crm = new ClassReflectionModel();
-                    crm.setName(it);
-                    crm.setAllPublicConstructors(true);
-                    return crm;
-                })
+        Stream.concat(
+                findExtensions(),
+                Stream.of(
+                        "org.apache.webbeans.web.lifecycle.WebContainerLifecycle",
+                        "org.apache.meecrowave.logging.tomcat.LogFacade",
+                        "org.apache.catalina.servlets.DefaultServlet",
+                        "org.apache.catalina.authenticator.NonLoginAuthenticator"))
+                .map(it -> new ClassReflectionModel(it, null, true, null, null, null, null, null, null, null, null))
                 .forEach(context::register);
 
         Stream.of(
@@ -130,120 +138,97 @@ public class MeecrowaveExtension implements ArthurExtension {
                 "org.apache.tomcat.util.descriptor.web.WebXml",
                 "org.apache.coyote.http11.Http11NioProtocol",
                 "javax.servlet.ServletContext")
-                .map(it -> {
-                    ClassReflectionModel crm = new ClassReflectionModel();
-                    crm.setName(it);
-                    crm.setAllPublicMethods(true);
-                    return crm;
-                })
+                .map(it -> new ClassReflectionModel(it, null, null, null, true, null, null, null, null, null, null))
                 .forEach(context::register);
 
-        ClassReflectionModel crm = new ClassReflectionModel();
-        crm.setName("org.apache.cxf.jaxrs.provider.ProviderFactory");
-        ClassReflectionModel.MethodReflectionModel method = new ClassReflectionModel.MethodReflectionModel();
-        method.setName("getReadersWriters");
-        crm.setMethods(Collections.singletonList(method));
-        context.register(crm);
+        context.register(new ClassReflectionModel(
+                "org.apache.cxf.jaxrs.provider.ProviderFactory", null, null, null, null, null, null, null, null, null,
+                singletonList(new ClassReflectionModel.MethodReflectionModel("getReadersWriters", null))));
+        context.register(new ClassReflectionModel(
+                "org.apache.johnzon.jaxrs.jsonb.jaxrs.JsonbJaxrsProvider$ProvidedInstance", null, null, null, null, null, null, null, null,
+                singletonList(new ClassReflectionModel.FieldReflectionModel("instance", null)), null));
+        context.register(new ClassReflectionModel(
+                "org.apache.johnzon.jaxrs.jsonb.jaxrs.JsonbJaxrsProvider", null, null, null, null, null, null, null, null,
+                singletonList(new ClassReflectionModel.FieldReflectionModel("providers", null)), null));
+        context.register(new ClassReflectionModel(
+                "org.apache.xbean.finder.AnnotationFinder", null, null, null, null, null, null, null, null,
+                singletonList(new ClassReflectionModel.FieldReflectionModel("linking", true)), null));
+    }
 
-        crm = new ClassReflectionModel();
-        crm.setName("org.apache.johnzon.jaxrs.jsonb.jaxrs.JsonbJaxrsProvider$ProvidedInstance");
-        ClassReflectionModel.FieldReflectionModel field = new ClassReflectionModel.FieldReflectionModel();
-        field.setName("instance");
-        crm.setFields(Collections.singletonList(field));
-        context.register(crm);
+    private Stream<String> findExtensions() {
+        final ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        try {
+            final Enumeration<URL> resources = loader.getResources("META-INF/cxf/bus-extensions.txt");
+            return list(resources).stream()
+                    .flatMap(url -> new TextExtensionFragmentParser(loader).getExtensions(url).stream())
+                    .map(Extension::getClassname)
+                    .distinct();
+        } catch (final IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
 
-        crm = new ClassReflectionModel();
-        crm.setName("org.apache.johnzon.jaxrs.jsonb.jaxrs.JsonbJaxrsProvider");
-        field = new ClassReflectionModel.FieldReflectionModel();
-        field.setName("providers");
-        crm.setFields(Collections.singletonList(field));
-        context.register(crm);
-
-        crm = new ClassReflectionModel();
-        crm.setName("org.apache.xbean.finder.AnnotationFinder");
-        field = new ClassReflectionModel.FieldReflectionModel();
-        field.setName("linking");
-        field.setAllowWrite(true);
-        crm.setFields(Collections.singletonList(field));
-        context.register(crm);
+    private Stream<String> findContextTypes(final Context context) {
+        return InjectionUtils.STANDARD_CONTEXT_CLASSES.stream().filter(it -> {
+            try {
+                return context.loadClass(it) != null;
+            } catch (final IllegalStateException ise) {
+                return false;
+            }
+        });
     }
 
     private void registerResources(final Context context) {
         Stream.of(
-                "org\\/apache\\/catalina\\/.*\\.properties",
-                "javax\\/servlet\\/(jsp\\/)?resources\\/.*\\.(xsd|dtd)",
+                "org\\/apache\\/catalina\\/.*\\.properties", // can be refined to not include resource bundles
+                "(javax|jakarta)\\/servlet\\/(jsp\\/)?resources\\/.*\\.(xsd|dtd)",
                 "meecrowave\\.properties",
                 "META-INF/cxf/bus-extensions\\.txt",
                 "org/apache/cxf/version/version\\.properties")
-                .map(it -> {
-                    ResourceModel rm = new ResourceModel();
-                    rm.setPattern(it);
-                    return rm;
-                })
+                .map(ResourceModel::new)
                 .forEach(context::register);
     }
 
     private void registerIncludeResourceBundles(final Context context) {
-        Stream.of(
-                "org.apache.cxf.Messages",
-                "org.apache.cxf.interceptor.Messages",
-                "org.apache.cxf.bus.managers.Messages",
-                "org.apache.cxf.jaxrs.Messages",
-                "org.apache.cxf.jaxrs.provider.Messages",
-                "org.apache.cxf.jaxrs.interceptor.Messages",
-                "org.apache.cxf.jaxrs.utils.Messages",
-                "org.apache.cxf.transport.servlet.Messages",
-                "org.apache.catalina.authenticator.LocalStrings",
-                "org.apache.catalina.connector.LocalStrings",
-                "org.apache.catalina.core.LocalStrings",
-                "org.apache.catalina.deploy.LocalStrings",
-                "org.apache.catalina.filters.LocalStrings",
-                "org.apache.catalina.loader.LocalStrings",
-                "org.apache.catalina.manager.host.LocalStrings",
-                "org.apache.catalina.manager.LocalStrings",
-                "org.apache.catalina.mapper.LocalStrings",
-                "org.apache.catalina.realm.LocalStrings",
-                "org.apache.catalina.security.LocalStrings",
-                "org.apache.catalina.servlets.LocalStrings",
-                "org.apache.catalina.session.LocalStrings",
-                "org.apache.catalina.startup.LocalStrings",
-                "org.apache.catalina.users.LocalStrings",
-                "org.apache.catalina.util.LocalStrings",
-                "org.apache.catalina.valves.LocalStrings",
-                "org.apache.catalina.valves.rewrite.LocalStrings",
-                "org.apache.catalina.webresources.LocalStrings",
-                "org.apache.coyote.http11.filters.LocalStrings",
-                "org.apache.coyote.http11.LocalStrings",
-                "org.apache.coyote.http11.upgrade.LocalStrings",
-                "org.apache.coyote.http2.LocalStrings",
-                "org.apache.coyote.LocalStrings",
-                "org.apache.tomcat.util.buf.LocalStrings",
-                "org.apache.tomcat.util.codec.binary.LocalStrings",
-                "org.apache.tomcat.util.compat.LocalStrings",
-                "org.apache.tomcat.util.descriptor.LocalStrings",
-                "org.apache.tomcat.util.descriptor.tld.LocalStrings",
-                "org.apache.tomcat.util.descriptor.web.LocalStrings",
-                "org.apache.tomcat.util.digester.LocalStrings",
-                "org.apache.tomcat.util.http.LocalStrings",
-                "org.apache.tomcat.util.http.parser.LocalStrings",
-                "org.apache.tomcat.util.json.LocalStrings",
-                "org.apache.tomcat.util.LocalStrings",
-                "org.apache.tomcat.util.modeler.LocalStrings",
-                "org.apache.tomcat.util.net.jsse.LocalStrings",
-                "org.apache.tomcat.util.net.LocalStrings",
-                "org.apache.tomcat.util.net.openssl.ciphers.LocalStrings",
-                "org.apache.tomcat.util.net.openssl.LocalStrings",
-                "org.apache.tomcat.util.scan.LocalStrings",
-                "org.apache.tomcat.util.security.LocalStrings",
-                "org.apache.tomcat.util.threads.res.LocalStrings",
-                "javax.servlet.LocalStrings",
-                "javax.servlet.http.LocalStrings")
-                .map(it -> {
-                    ResourceBundleModel rbm = new ResourceBundleModel();
-                    rbm.setName(it);
-                    return rbm;
-                })
-                .forEach(context::register);
+        final ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        try {
+            final Filter includedJarNamePrefixes = Filters.prefixes("cxf-", "tomcat-");
+            Stream.concat(
+                    Stream.of( // spec, we hardcode them since it is unlikely to move - for now javax ones but jakarta would be similar
+                            "javax.servlet.LocalStrings",
+                            "javax.servlet.http.LocalStrings"),
+                    new UrlSet(loader)
+                            .exclude(loader.getParent())
+                            .excludeJvm()
+                            .getUrls().stream()
+                            .map(Files::toFile)
+                            .filter(jar -> includedJarNamePrefixes.accept(jar.getName()))
+                            .flatMap(this::extractBundles))
+                    .map(ResourceBundleModel::new)
+                    .forEach(context::register);
+        } catch (final IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private Stream<String> extractBundles(final File file) {
+        if (file.getName().startsWith("cxf-")) {
+            return propertiesFiles(file, "Messages");
+        } // else tomcat
+        return propertiesFiles(file, "LocalStrings");
+    }
+
+    private Stream<String> propertiesFiles(final File file, final String name) {
+        final String suffix = '/' + name + ".properties";
+        try (final JarFile jar = new JarFile(file)) {
+            return list(jar.entries()).stream()
+                    .filter(it -> !it.isDirectory())
+                    .map(JarEntry::getName)
+                    .filter(n -> n.endsWith(suffix))
+                    .map(n -> n.replace(".", "/").substring(0, n.length() - ".properties".length()));
+        } catch (final IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
 }
